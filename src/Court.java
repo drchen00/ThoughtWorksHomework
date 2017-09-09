@@ -1,16 +1,27 @@
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.TreeSet;
+import java.time.format.DateTimeParseException;
+import java.util.*;
 
 public class Court {
+    private static Set<Court> courts = new HashSet<>();
     private TreeSet<Schedule> schedules = new TreeSet<>();
     private TreeSet<Event> bill = new TreeSet<>();
     private String name;
     private ScheduleFactory scheduleFactory;
 
-    public Court(String name) {
+    @Override
+    public boolean equals(Object obj) {
+        return obj instanceof Court && name.equals(((Court) obj).name);
+    }
+
+    @Override
+    public int hashCode() {
+        return name.hashCode();
+    }
+
+    private Court(String name) {
         this.name = name;
         scheduleFactory = new ScheduleFactory();
     }
@@ -19,14 +30,90 @@ public class Court {
         return name;
     }
 
-    public void clearSchedules(){}
+    public static boolean createCourt(String name) {
+        return courts.add(new Court(name));
+    }
 
-    public void clearBill(){}
+    private static void printAllBill() {
+        System.out.println("收入汇总");
+        System.out.println("---");
+        Iterator<Court> iterator = courts.iterator();
+        double sum=0;
+        while (iterator.hasNext()) {
+            sum+=iterator.next().printBill();
+            if (iterator.hasNext())
+                System.out.println();
+        }
+        System.out.println("---");
+        System.out.println("总计: "+(int)sum+"元");
+    }
 
-    public void booking(String userId,LocalDate date,LocalTime startTime,LocalTime endTime) {
+    public static void runCommand(String s) {
+        if (s.equals("")) {
+            printAllBill();
+            return;
+        }
+        String[] para = s.split(" ");
+        try {
+            if (para.length != 4 && para.length != 5)
+                throw new ErrorInputException();
+            String userId = para[0];
+            LocalDate date = LocalDate.parse(para[1]);
+            String[] time = para[2].split("~");
+            LocalTime startTime = LocalTime.parse(time[0]);
+            LocalTime endTime = LocalTime.parse(time[1]);
+            Court court = getCourtByName(para[3]);
+            if (court == null)
+                throw new ErrorInputException();
+            boolean result;
+            if (para.length == 5) {
+                if (para[4].equals("C"))
+                    result = court.cancel(userId, date, startTime, endTime);
+                else
+                    throw new ErrorInputException();
+            } else {
+                result = court.booking(userId, date, startTime, endTime);
+            }
+            if (result)
+                System.out.println("> Success: the booking is accepted!");
+        } catch (ErrorInputException | ArrayIndexOutOfBoundsException | DateTimeParseException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    public static Court getCourtByName(String name) {
+        for (Court court : courts) {
+            if (court.name.equals(name))
+                return court;
+        }
+        return null;
+    }
+
+    public double printBill() {
+        System.out.println("场地:" + name);
+        double sum = 0;
+        for (Event event : bill) {
+            if(event.isPunished){
+                sum+=event.income*event.punishment*event.punishedTimes;
+            }else {
+                sum+=event.income;
+            }
+            System.out.println(event.toString());
+        }
+        System.out.println("小计: "+(int)sum+"元");
+        return sum;
+    }
+
+    public void clearSchedules() {
+    }
+
+    public void clearBill() {
+    }
+
+    public boolean booking(String userId, LocalDate date, LocalTime startTime, LocalTime endTime) {
         try {
             if (startTime.getMinute() != 0 || endTime.getMinute() != 0 || startTime.compareTo(endTime) != -1)
-                throw new ErrorTimeException();
+                throw new ErrorInputException();
             Schedule schedule = scheduleFactory.creatSchedule(date);
             if (schedules.contains(schedule))
                 schedule = schedules.floor(schedule);
@@ -35,22 +122,32 @@ public class Court {
             double earnest = schedule.schedule(startTime.getHour(), endTime.getHour());
             if (earnest < 0)
                 throw new BookingConfilctsException();
-            bill.add(new Event(userId,date,startTime,endTime,earnest));
-            System.out.println("> Success: the booking is accepted");
-        } catch (ErrorTimeException | BookingConfilctsException e) {
+            bill.add(new Event(userId, date, startTime, endTime, earnest));
+            return true;
+        } catch (ErrorInputException | BookingConfilctsException e) {
             System.out.println(e.getMessage());
+            return false;
         }
     }
 
-    public void cancel(String userId,LocalDate date,LocalTime startTime,LocalTime endTime){
-        try{
+    public boolean cancel(String userId, LocalDate date, LocalTime startTime, LocalTime endTime) {
+        try {
             if (startTime.getMinute() != 0 || endTime.getMinute() != 0 || startTime.compareTo(endTime) != -1)
-                throw new ErrorTimeException();
-            Event event = new Event(userId,date,startTime,endTime);
-            if(!bill.contains(event))
+                throw new ErrorInputException();
+            Event event = new Event(userId, date, startTime, endTime);
+            if (!bill.contains(event))
                 throw new BookingNotExistException();
-        } catch (ErrorTimeException | BookingNotExistException e) {
+            Schedule schedule = schedules.floor(scheduleFactory.creatSchedule(date));
+            schedule.rollBack(startTime.getHour(), endTime.getHour());
+            bill.remove(event);
+            event.isPunished = true;
+            event.punishedTimes = 1;
+            if (!bill.add(event))
+                bill.floor(event).punishedTimes++;
+            return true;
+        } catch (ErrorInputException | BookingNotExistException e) {
             System.out.println(e.getMessage());
+            return false;
         }
     }
 
@@ -86,7 +183,24 @@ public class Court {
         }
 
         private Event(String userId, LocalDate date, LocalTime startTime, LocalTime endTime) {
-            this(userId,date,startTime,endTime,0);
+            this(userId, date, startTime, endTime, 0);
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            if (isPunished) {
+                for (int i = 0; i < punishedTimes; ++i) {
+                    sb.append(date).append(" ")
+                            .append(startTime).append("~").append(endTime).append(" ")
+                            .append("违约金").append(" ")
+                            .append((int) (income * punishment)).append("元");
+                }
+            } else
+                sb.append(date).append(" ")
+                        .append(startTime).append("~").append(endTime).append(" ")
+                        .append((int)income).append("元");
+            return sb.toString();
         }
 
         @Override
@@ -96,23 +210,23 @@ public class Court {
                     && date.equals(((Event) obj).date)
                     && startTime.equals(((Event) obj).startTime)
                     && endTime.equals(((Event) obj).endTime)
-                    && isPunished==((Event)obj).isPunished;
+                    && isPunished == ((Event) obj).isPunished;
         }
 
         @Override
         public int hashCode() {
             int result = 1;
-            result = 31*result+userId.hashCode();
-            result = 31*result+date.hashCode();
-            result = 31*result+startTime.hashCode();
-            result = 31*result+endTime.hashCode();
+            result = 31 * result + userId.hashCode();
+            result = 31 * result + date.hashCode();
+            result = 31 * result + startTime.hashCode();
+            result = 31 * result + endTime.hashCode();
             return result;
         }
 
         @Override
         public int compareTo(Event o) {
             int tmp = date.compareTo(o.date);
-            if(tmp==0){
+            if (tmp == 0) {
                 tmp = startTime.compareTo(o.startTime);
             }
             return tmp;
@@ -152,15 +266,24 @@ public class Court {
 
         private double schedule(int startTime, int endTime) {
             double money = 0;
-            for (int i = startTime - baseTime; i < endTime - baseTime; ++i) {
-                if (acceptTime[i])
+            for (int i = startTime; i < endTime; ++i) {
+                int ti = i - baseTime;
+                if (acceptTime[ti]) {
+                    rollBack(startTime, i);
                     return -1;
-                else {
-                    acceptTime[i] = true;
-                    money += price[i];
+                } else {
+                    acceptTime[ti] = true;
+                    money += price[ti];
                 }
             }
             return money;
+        }
+
+        private void rollBack(int startTime, int endTime) {
+            for (int i = startTime; i < endTime; ++i) {
+                int ti = i - baseTime;
+                acceptTime[ti] = false;
+            }
         }
     }
 
