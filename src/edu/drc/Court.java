@@ -1,3 +1,9 @@
+package edu.drc;
+
+import edu.drc.exception.BookingConfilctsException;
+import edu.drc.exception.BookingNotExistException;
+import edu.drc.exception.ErrorInputException;
+
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -6,8 +12,8 @@ import java.util.*;
 
 public class Court {
     private static Set<Court> courts = new HashSet<>();
-    private TreeSet<Schedule> schedules = new TreeSet<>();
-    private TreeSet<Event> bill = new TreeSet<>();
+    private Map<Schedule, Schedule> schedules = new HashMap<>();
+    private List<Event> bill = new ArrayList<>();
     private String name;
     private ScheduleFactory scheduleFactory;
 
@@ -26,26 +32,22 @@ public class Court {
         scheduleFactory = new ScheduleFactory();
     }
 
-    public String getName() {
-        return name;
-    }
-
     public static boolean createCourt(String name) {
         return courts.add(new Court(name));
     }
 
     private static void printAllBill() {
-        System.out.println("收入汇总");
-        System.out.println("---");
+        System.out.println("> 收入汇总");
+        System.out.println("> ---");
         Iterator<Court> iterator = courts.iterator();
-        double sum=0;
+        double sum = 0;
         while (iterator.hasNext()) {
-            sum+=iterator.next().printBill();
+            sum += iterator.next().printBill();
             if (iterator.hasNext())
-                System.out.println();
+                System.out.println(">");
         }
-        System.out.println("---");
-        System.out.println("总计: "+(int)sum+"元");
+        System.out.println("> ---");
+        System.out.println("> 总计: " + (int) sum + "元");
     }
 
     public static void runCommand(String s) {
@@ -81,7 +83,7 @@ public class Court {
         }
     }
 
-    public static Court getCourtByName(String name) {
+    private static Court getCourtByName(String name) {
         for (Court court : courts) {
             if (court.name.equals(name))
                 return court;
@@ -89,36 +91,31 @@ public class Court {
         return null;
     }
 
-    public double printBill() {
-        System.out.println("场地:" + name);
+    private double printBill() {
+        System.out.println("> 场地:" + name);
         double sum = 0;
+        Collections.sort(bill);
         for (Event event : bill) {
-            if(event.isPunished){
-                sum+=event.income*event.punishment*event.punishedTimes;
-            }else {
-                sum+=event.income;
-            }
-            System.out.println(event.toString());
+            sum += event.income;
+            System.out.println("> "+event.toString());
         }
-        System.out.println("小计: "+(int)sum+"元");
+        System.out.println("> 小计: " + (int) sum + "元");
         return sum;
     }
 
-    public void clearSchedules() {
-    }
+//    public void clearSchedules() {
+//    }
+//
+//    public void clearBill() {
+//    }
 
-    public void clearBill() {
-    }
-
-    public boolean booking(String userId, LocalDate date, LocalTime startTime, LocalTime endTime) {
+    private boolean booking(String userId, LocalDate date, LocalTime startTime, LocalTime endTime) {
         try {
             if (startTime.getMinute() != 0 || endTime.getMinute() != 0 || startTime.compareTo(endTime) != -1)
                 throw new ErrorInputException();
             Schedule schedule = scheduleFactory.creatSchedule(date);
-            if (schedules.contains(schedule))
-                schedule = schedules.floor(schedule);
-            else
-                schedules.add(schedule);
+            schedules.putIfAbsent(schedule, schedule);
+            schedule = schedules.get(schedule);
             double earnest = schedule.schedule(startTime.getHour(), endTime.getHour());
             if (earnest < 0)
                 throw new BookingConfilctsException();
@@ -130,20 +127,19 @@ public class Court {
         }
     }
 
-    public boolean cancel(String userId, LocalDate date, LocalTime startTime, LocalTime endTime) {
+    private boolean cancel(String userId, LocalDate date, LocalTime startTime, LocalTime endTime) {
         try {
             if (startTime.getMinute() != 0 || endTime.getMinute() != 0 || startTime.compareTo(endTime) != -1)
                 throw new ErrorInputException();
             Event event = new Event(userId, date, startTime, endTime);
-            if (!bill.contains(event))
+            int index = bill.indexOf(event);
+            if (index < 0)
                 throw new BookingNotExistException();
-            Schedule schedule = schedules.floor(scheduleFactory.creatSchedule(date));
+            Schedule schedule = schedules.get(scheduleFactory.creatSchedule(date));
             schedule.rollBack(startTime.getHour(), endTime.getHour());
-            bill.remove(event);
+            event = bill.get(index);
             event.isPunished = true;
-            event.punishedTimes = 1;
-            if (!bill.add(event))
-                bill.floor(event).punishedTimes++;
+            event.income *= event.punishment;
             return true;
         } catch (ErrorInputException | BookingNotExistException e) {
             System.out.println(e.getMessage());
@@ -159,7 +155,6 @@ public class Court {
         private double income;
         private double punishment;
         private boolean isPunished;
-        private int punishedTimes;
 
         private Event(String userId, LocalDate date, LocalTime startTime, LocalTime endTime, double income) {
             this.userId = userId;
@@ -189,17 +184,11 @@ public class Court {
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
-            if (isPunished) {
-                for (int i = 0; i < punishedTimes; ++i) {
-                    sb.append(date).append(" ")
-                            .append(startTime).append("~").append(endTime).append(" ")
-                            .append("违约金").append(" ")
-                            .append((int) (income * punishment)).append("元");
-                }
-            } else
-                sb.append(date).append(" ")
-                        .append(startTime).append("~").append(endTime).append(" ")
-                        .append((int)income).append("元");
+            sb.append(date).append(" ")
+                    .append(startTime).append("~").append(endTime).append(" ");
+            if (isPunished)
+                sb.append("违约金").append(" ");
+            sb.append((int) income).append("元");
             return sb.toString();
         }
 
