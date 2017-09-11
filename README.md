@@ -34,19 +34,39 @@ private Map<Schedule, Schedule> schedules = new HashMap<>();
 private List<Event> bill = new ArrayList<>();
 ```
 * 在Court类内部有两个内部类<br/>
-    * data记录安排表的日期是区分某个场地下不同日期的安排表的唯一依据
-    * acceptTime作为一个数组记录了当天每个小时段的预定状态：false表示未预定；true表示已预定。
-    * 因为acceptTime数组从0开始，所以需要一个偏移量表示正常时间。
-    * price对应acceptTime表示每个小时段的价格。
-**Schedule**
-```java
-private class Schedule{
-    private double[] price;
+    * **Schedule**日期安排表
+        * data 记录安排表的日期是区分某个场地下不同日期的安排表的唯一依据
+        * acceptTime 作为一个数组记录了当天每个小时段的预定状态：false表示未预定；true表示已预定。
+        * baseTime 因为acceptTime数组从0开始，所以需要一个偏移量表示正常时间。
+        * price 对应acceptTime表示每个小时段的价格。  
+    ```java
+    private class Schedule{
+          private double[] price;
     
-    private LocalDate date;
+          private LocalDate date;
     
-    private boolean[] acceptTime;
+          private boolean[] acceptTime;
     
-    private int baseTime;
-}
-```
+          private int baseTime;
+    }
+    ```
+    * **Event**订单
+        * userId 用户ID
+        * date 预定日期
+        * startTime-endTime 预定时间段
+        * income 该订单收入
+        * punishment 如果违约违约金比例
+        * isPunished 该订单是否为违约订单
+        * 其中userId,date,startTime,endTime,isPunishment作为是否是重复订单的依据，但是账单（bill）里会存在重复订单的不同实体。
+    ```java
+    private class Event implements Comparable<Event> {
+            private String userId;
+            private LocalDate date;
+            private LocalTime startTime;
+            private LocalTime endTime;
+            private double income;
+            private double punishment;
+            private boolean isPunished;
+    }
+    ```
+* edu.drc.exception下是一些自定义异常类用来处理输入错误，预定冲突，找不到预定这些错误。
