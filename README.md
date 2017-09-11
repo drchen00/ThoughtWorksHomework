@@ -1,5 +1,5 @@
 # ThoughtWorks家庭作业——羽毛球馆
-### 运行方式
+## 运行方式
 * **开发环境**<br/>
 整个题目使用Java（Java8）语言在IntelliJ IDEA平台下进行开发，编译结果位于out/production/ThoughtWorksHomework目录下。其中Main.class是整个程序的入口。进入上述文件夹位置后在控制台执行Java Main进入程序，然后输入相应指令会得到反馈提示。因为本程序使用了Java8相关的时间处理函数所以请务必使用jre1.8运行。<br/>
 * **运行指令**<br/>
@@ -10,7 +10,7 @@
     ${userId} YYYY-MM-DD HH:MM~HH:MM ${court} C<br/>
     * _打印收入汇总_<br/>
     '\r\n'<br/>
-### 项目结构
+## 项目结构
 * Main.java是整个程序入口主要作用是初始化场地，然后接收指令执行。
 * 在edu.drc包下面的Court.java包含Court类<br/>
 ```java
